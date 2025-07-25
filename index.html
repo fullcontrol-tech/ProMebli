@@ -42,6 +42,47 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.1/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@8/swiper-bundle.min.css"/>
     
+
+
+<link rel="stylesheet" href="/css/intlTelInput.min.css">
+<style>
+  .iti {
+    width: 100%;
+  }
+  .iti__flag {
+    background-image: url("/img/flags.png") !important;
+  }
+
+
+
+/* Меню списку країн */
+.iti__country-list {
+  background-color: #000 !important;  
+  border: 1px solid #444;
+  max-height: 250px;
+  overflow-y: auto;
+  font-size: 14px;
+}
+
+/* Елементи списку */
+.iti__country {
+  padding: 10px 12px;
+  color: #fff !important;
+}
+
+/* Виділення елемента */
+.iti__country.iti__highlight {
+  background-color: #333 !important;
+}
+
+/* Код країни */
+.iti__dial-code {
+  color: #aaa !important;
+}
+
+</style>
+
+
     <!-- Local CSS -->
     <link rel="stylesheet" href="styles.min.css"/>
 
@@ -460,14 +501,9 @@
                         </div>
                         
                         <!-- Phone Field -->
-                        <div class="form-group">
-                            <input type="tel" 
-                                   name="phone" 
-                                   placeholder="Ваш номер телефону" 
-                                   required 
-                                   pattern="[0-9\s\-()+]{10,}" 
-                                   title="Будь ласка, введіть коректний номер телефону">
-                        </div>
+                      <div class="form-group">
+                        <input type="tel" id="phone" name="phone" placeholder=" (__) ___-__-__" required>
+                    </div>
                         
                         <!-- Submit Button -->
                         <button type="submit" class="btn">Відправити заявку</button>
@@ -551,5 +587,33 @@
     <!-- SCRIPTS -->
     <script src="https://cdn.jsdelivr.net/npm/swiper@8/swiper-bundle.min.js"></script>
     <script src="script.min.js"></script>
+
+<script src="/js/intlTelInput.min.js"></script>
+<script src="/js/utils.js"></script>
+<script src="/js/inputmask.min.js"></script>
+
+<script>
+  const input = document.querySelector("#phone");
+
+  const iti = window.intlTelInput(input, {
+    initialCountry: "ua",
+    separateDialCode: true,
+    utilsScript: "/js/utils.js"
+  });
+
+  // Маска для українського номера (тільки цифри)
+  const inputMask = new Inputmask("99 999 99 99", {
+    placeholder: "_",
+    showMaskOnHover: false,
+    showMaskOnFocus: true
+  });
+  inputMask.mask(input);
+
+  // Вставити повний номер у форму перед відправкою
+  document.querySelector("#leadForm").addEventListener("submit", function (e) {
+    input.value = iti.getNumber(); // результат: +380XXXXXXXXX
+  });
+</script>
+
 </body>
 </html>
