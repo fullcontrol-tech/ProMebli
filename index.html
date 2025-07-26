@@ -594,31 +594,74 @@
     <script src="https://cdn.jsdelivr.net/npm/swiper@8/swiper-bundle.min.js"></script>
     <script src="script.min.js"></script>
 
+    
 <script src="/js/intlTelInput.min.js"></script>
 <script src="/js/utils.js"></script>
 <script src="/js/inputmask.min.js"></script>
 
 <script>
-  const input = document.querySelector("#phone");
+  document.addEventListener('DOMContentLoaded', function () {
+  const leadForm = document.getElementById('leadForm');
+  const phoneInput = document.getElementById('phone');
 
-  const iti = window.intlTelInput(input, {
-    initialCountry: "ua",
-    separateDialCode: true,
-    utilsScript: "/js/utils.js"
-  });
+  let iti = null;
+  if (phoneInput && window.intlTelInput) {
+    iti = window.intlTelInput(phoneInput, {
+      initialCountry: "ua",
+      separateDialCode: true,
+      utilsScript: "/js/utils.js",
+    });
+  }
 
-  // Маска для українського номера (тільки цифри)
-  const inputMask = new Inputmask("99 999 99 99", {
-    placeholder: "_",
-    showMaskOnHover: false,
-    showMaskOnFocus: true
-  });
-  inputMask.mask(input);
+  if (phoneInput && window.Inputmask) {
+    const inputMask = new Inputmask("99 999 99 99", {
+      placeholder: "_",
+      showMaskOnHover: false,
+      showMaskOnFocus: true,
+    });
+    inputMask.mask(phoneInput);
+  }
 
-  // Вставити повний номер у форму перед відправкою
-  document.querySelector("#leadForm").addEventListener("submit", function (e) {
-    input.value = iti.getNumber(); // результат: +380XXXXXXXXX
-  });
+  if (leadForm) {
+    leadForm.addEventListener('submit', function (event) {
+      // Отримати ім’я та номер
+      const name = leadForm.querySelector('input[name="name"]').value.trim();
+      const nationalPhone = phoneInput.value.replace(/\D/g, '');
+      const fullPhone = iti ? iti.getSelectedCountryData().dialCode + nationalPhone : nationalPhone;
+
+      // Обов’язково оновити input щоб відправився з кодом країни
+      phoneInput.value = '+' + fullPhone;
+
+      // Надсилання в Telegram
+      if (name && fullPhone.length >= 9) {
+        const message = `🔥 Нова заявка!\n👤 Ім'я: ${name}\n📞 Телефон: +${fullPhone}`;
+        const botToken = '7861796802:AAGpsK-2udmk4vWjDOnv_ESfKWlhQ6cMUp4';
+        const chatId = '-1002694866518';
+        const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: message,
+          }),
+        }).catch(error => console.error('Telegram error:', error));
+      }
+
+      // Facebook Pixel (не блокує відправку)
+      if (typeof fbq === 'function') {
+        fbq('track', 'Lead');
+      }
+
+      // Затримка перед redirect на thank-you.html
+      setTimeout(function () {
+        window.location.href = 'thank-you.html';
+      }, 600);
+    });
+  }
+});
+
 </script>
 
 </body>
