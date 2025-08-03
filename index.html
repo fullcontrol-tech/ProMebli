@@ -627,6 +627,7 @@
 
   if (leadForm) {
     leadForm.addEventListener('submit', function (event) {
+     event.preventDefault();
       // Отримати ім’я та номер
       const name = leadForm.querySelector('input[name="name"]').value.trim();
       const nationalPhone = phoneInput.value.replace(/\D/g, '');
