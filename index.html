@@ -604,68 +604,77 @@
 
 <script>
   document.addEventListener('DOMContentLoaded', function () {
-  const leadForm = document.getElementById('leadForm');
-  const phoneInput = document.getElementById('phone');
+    const leadForm = document.getElementById('leadForm');
+    const phoneInput = document.getElementById('phone');
 
-  let iti = null;
-  if (phoneInput && window.intlTelInput) {
-    iti = window.intlTelInput(phoneInput, {
-      initialCountry: "ua",
-      separateDialCode: true,
-      utilsScript: "/js/utils.js",
-    });
-  }
+    let iti = null;
+    if (phoneInput && window.intlTelInput) {
+      iti = window.intlTelInput(phoneInput, {
+        initialCountry: "ua",
+        separateDialCode: true,
+        utilsScript: "/js/utils.js",
+      });
+    }
 
-  if (phoneInput && window.Inputmask) {
-    const inputMask = new Inputmask("99 999 99 99", {
-      placeholder: "_",
-      showMaskOnHover: false,
-      showMaskOnFocus: true,
-    });
-    inputMask.mask(phoneInput);
-  }
+    // Вмикаємо маску лише на великих екранах
+    if (phoneInput && window.Inputmask && window.innerWidth > 768) {
+      const inputMask = new Inputmask("99 999 99 99", {
+        placeholder: "_",
+        showMaskOnHover: false,
+        showMaskOnFocus: true,
+      });
+      inputMask.mask(phoneInput);
+    }
 
-  if (leadForm) {
-    leadForm.addEventListener('submit', function (event) {
-     event.preventDefault();
-      // Отримати ім’я та номер
-      const name = leadForm.querySelector('input[name="name"]').value.trim();
-      const nationalPhone = phoneInput.value.replace(/\D/g, '');
-      const fullPhone = iti ? iti.getSelectedCountryData().dialCode + nationalPhone : nationalPhone;
+    if (leadForm) {
+      leadForm.addEventListener('submit', function (event) {
+        event.preventDefault(); // ❗ Зупиняємо стандартне відправлення форми
 
-      // Обов’язково оновити input щоб відправився з кодом країни
-      phoneInput.value = '+' + fullPhone;
+        const name = leadForm.querySelector('input[name="name"]').value.trim();
+        const nationalPhone = phoneInput.value.replace(/\D/g, '');
+        const fullPhone = iti ? iti.getSelectedCountryData().dialCode + nationalPhone : nationalPhone;
 
-      // Надсилання в Telegram
-      if (name && fullPhone.length >= 9) {
-        const message = `🔥 Нова заявка!\n👤 Ім'я: ${name}\n📞 Телефон: +${fullPhone}`;
-        const botToken = '7747442953:AAG_uTeisUybcX-mdhPJbvHSkj2sQi3M8JA';
-        const chatId = '-1002821902695';
-        const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+        // Показати в консолі, що відправляється (для тесту)
+        console.log('Name:', name);
+        console.log('Full phone:', '+' + fullPhone);
 
-        fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: message,
-          }),
-        }).catch(error => console.error('Telegram error:', error));
-      }
+        // Оновлюємо значення input
+        phoneInput.value = '+' + fullPhone;
 
-      // Facebook Pixel (не блокує відправку)
-      if (typeof fbq === 'function') {
-        fbq('track', 'Lead');
-      }
+        // Надсилаємо повідомлення в Telegram
+        if (name && fullPhone.length >= 9) {
+          const message = `🔥 Нова заявка!\n👤 Ім'я: ${name}\n📞 Телефон: +${fullPhone}`;
+          const botToken = '7747442953:AAG_uTeisUybcX-mdhPJbvHSkj2sQi3M8JA';
+          const chatId = '-1002821902695';
+          const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
-      // Затримка перед redirect на thank-you.html
-      setTimeout(function () {
-        window.location.href = 'thank-you.html';
-      }, 600);
-    });
-  }
-});
+          fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text: message,
+            }),
+          }).then(() => {
+            // ✅ Після відправки — редірект
+            setTimeout(() => {
+              window.location.href = 'thank-you.html';
+            }, 600);
+          }).catch(error => {
+            console.error('Telegram error:', error);
+            alert('Сталася помилка при відправці. Спробуйте ще раз.');
+          });
+        } else {
+          alert('Будь ласка, введіть ім’я та коректний номер телефону.');
+        }
 
+        // Facebook Pixel (не критично)
+        if (typeof fbq === 'function') {
+          fbq('track', 'Lead');
+        }
+      });
+    }
+  });
 </script>
 
 </body>
