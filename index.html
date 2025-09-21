@@ -605,24 +605,29 @@
 <script src="/js/utils.js"></script>
 <script src="/js/inputmask.min.js"></script>
 
+
+<script src="https://cdn.jsdelivr.net/npm/intl-tel-input@18.5.7/build/js/intlTelInput.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/intl-tel-input@18.5.7/build/js/utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/inputmask@5.0.9/dist/inputmask.min.js"></script>
+
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   const leadForm   = document.getElementById('leadForm');
   const phoneInput = document.getElementById('phone');
   const hiddenE164 = document.getElementById('phone_e164');
 
+  // 1) intl-tel-input (прапорці)
   let iti = null;
-
-  // 1) Піднімаємо intl-tel-input
   if (phoneInput && window.intlTelInput) {
     iti = window.intlTelInput(phoneInput, {
       initialCountry: 'ua',
-      separateDialCode: true,       // показує 380 в окремому блоці зліва
-      utilsScript: '/js/utils.js',
+      separateDialCode: true,
+      utilsScript: 'https://cdn.jsdelivr.net/npm/intl-tel-input@18.5.7/build/js/utils.js',
     });
   }
 
-  // 2) Маска для локального вигляду (лише для зручності користувача)
+  // 2) Маска (для зручності)
   if (phoneInput && window.Inputmask) {
     const inputMask = new Inputmask('99 999 99 99', {
       placeholder: '_',
@@ -632,85 +637,78 @@ document.addEventListener('DOMContentLoaded', function () {
     inputMask.mask(phoneInput);
   }
 
-  // Хелпер: зібрати стабільний E.164 без дубляжу 380
+  // 3) Нормалізація в E.164 (без дублю 380)
   function buildE164() {
     if (!iti) return '';
-
-    // Спробувати "правильний" номер з плагіна
     const fromPlugin = iti.getNumber ? iti.getNumber() : '';
     const valid = iti.isValidNumber ? iti.isValidNumber() : false;
+    if (valid && fromPlugin && fromPlugin.startsWith('+')) return fromPlugin;
 
-    if (valid && fromPlugin && fromPlugin.startsWith('+')) {
-      return fromPlugin; // типу +380XXXXXXXXX
-    }
-
-    // Fallback: беремо raw з поля і прибираємо все зайве
-    const dialCode = (iti.getSelectedCountryData() && iti.getSelectedCountryData().dialCode) ? iti.getSelectedCountryData().dialCode : '380';
-    let raw = (phoneInput.value || '').replace(/\D/g, ''); // тільки цифри
-
-    // Прибрати дублікати коду країни на початку: 380, 0380, 380380 тощо
+    const dialCode = (iti.getSelectedCountryData()?.dialCode) || '380';
+    let raw = (phoneInput.value || '').replace(/\D/g, '');
     const dcRe = new RegExp('^(?:0*' + dialCode + ')+');
-    raw = raw.replace(dcRe, '');
-
-    // Якщо лишився національний нуль — прибираємо
-    raw = raw.replace(/^0+/, '');
-
+    raw = raw.replace(dcRe, '').replace(/^0+/, '');
     return '+' + dialCode + raw;
   }
 
-  // На кожній зміні — підтримуємо hidden-поле в актуальному стані
-  function syncHidden() {
-    hiddenE164.value = buildE164();
-  }
-  phoneInput.addEventListener('input', syncHidden);
-  phoneInput.addEventListener('blur', syncHidden);
-  if (iti) {
-    phoneInput.addEventListener('countrychange', syncHidden);
-  }
-  syncHidden(); // ініціалізація
+  function syncHidden() { hiddenE164.value = buildE164(); }
+  phoneInput?.addEventListener('input', syncHidden);
+  phoneInput?.addEventListener('blur', syncHidden);
+  phoneInput?.addEventListener('countrychange', syncHidden);
+  syncHidden();
 
-  if (leadForm) {
-    leadForm.addEventListener('submit', function (event) {
-      event.preventDefault(); // ми самі вирішуємо, що робити з формою
+  // 4) Сабміт: спочатку Telegram (чекаємо ≤2с), потім FormSubmit AJAX, потім редірект
+  leadForm?.addEventListener('submit', async function (event) {
+    event.preventDefault();
 
-      const name = (leadForm.querySelector('input[name="name"]')?.value || '').trim();
-      const e164 = buildE164();
-      hiddenE164.value = e164; // гарантуємо, що в момент сабміту там правильне значення
+    const name = (leadForm.querySelector('input[name="name"]')?.value || '').trim();
+    const e164 = buildE164();
+    hiddenE164.value = e164;
 
-      // (не чіпаємо видиме поле, щоб не плодити дубль 380 при separateDialCode)
-      // phoneInput.value = e164; // ← не треба
+    // --- Telegram (чекаємо, але максимум 2с) ---
+    const BOT_TOKEN = '7747442953:AAG_uTeisUybcX-mdhPJbvHSkj2sQi3M8JA'; // краще винести на бекенд
+    const CHAT_ID   = '-1002821902695';
 
-      // 3) Телеграм (⚠️ краще робити через бекенд; фронтовий токен можуть вкрасти)
-      const BOT_TOKEN = '7747442953:AAG_uTeisUybcX-mdhPJbvHSkj2sQi3M8JA'; // ← заміни або прибери
-      const CHAT_ID   = '-1002821902695';
-      if (BOT_TOKEN !== 'ВАШ_TELEGRAM_BOT_TOKEN' && name && e164 && e164.startsWith('+') && e164.length >= 10) {
-        fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    async function sendTelegram() {
+      if (BOT_TOKEN === 'ВАШ_TELEGRAM_BOT_TOKEN') return;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      try {
+        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: CHAT_ID,
             text: `🔥 Нова заявка!\n👤 Ім'я: ${name}\n📞 Телефон: ${e164}`,
           }),
-        }).catch(err => console.error('Telegram error:', err));
+          keepalive: true,
+          signal: controller.signal
+        });
+      } catch (e) {
+        console.warn('Telegram skipped/failed:', e?.name || e);
+      } finally {
+        clearTimeout(timeoutId);
       }
+    }
+    await sendTelegram();
 
-      // 4) Facebook Pixel (не блокує відправку)
-      if (typeof fbq === 'function') {
-        fbq('track', 'Lead');
-      }
-
-      // 5) ТЕПЕР або відправляємо на FormSubmit, або робимо власний редірект.
-      // --- ВАРІАНТ A: ВІДПРАВИТИ НА FORMSUBMIT ---
-      leadForm.submit(); // форма піде на https://formsubmit.co/...
-
-      // --- ВАРІАНТ B: СВОЄ "дякую" БЕЗ FormSubmit ---
-      // window.location.href = 'thank-you.html';
-    });
-  }
+    // --- FormSubmit AJAX (використовує твій email!) ---
+    const formData = new FormData(leadForm);
+    try {
+      const res = await fetch('https://formsubmit.co/ajax/ТВІЙ.EMAIL@gmail.com', {
+        method: 'POST',
+        body: formData,
+        headers: { 'Accept': 'application/json' }
+      });
+    } catch (err) {
+      console.error('FormSubmit AJAX error:', err);
+    } finally {
+      // --- Редірект на свою "дякую" ---
+      window.location.href = 'https://pro-mebli-kr.site/thank-you.html';
+    }
+  });
 });
 </script>
-
-
 
 </body>
 </html>
