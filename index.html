@@ -513,7 +513,10 @@
                                    pattern="[0-9\s\-()+]{10,}" 
                                    title="Будь ласка, введіть коректний номер телефону">
                         </div>
+                        <input type="hidden" name="_next" value="https://pro-mebli-kr.site/thank-you.html">
+                        <input type="hidden" name="phone_e164" id="phone_e164">
                         
+
                         <!-- Submit Button -->
                         <button type="submit" class="btn">Відправити заявку</button>
                     </form>
@@ -603,80 +606,110 @@
 <script src="/js/inputmask.min.js"></script>
 
 <script>
-  document.addEventListener('DOMContentLoaded', function () {
-    const leadForm = document.getElementById('leadForm');
-    const phoneInput = document.getElementById('phone');
+document.addEventListener('DOMContentLoaded', function () {
+  const leadForm   = document.getElementById('leadForm');
+  const phoneInput = document.getElementById('phone');
+  const hiddenE164 = document.getElementById('phone_e164');
 
-    let iti = null;
-    if (phoneInput && window.intlTelInput) {
-      iti = window.intlTelInput(phoneInput, {
-        initialCountry: "ua",
-        separateDialCode: true,
-        utilsScript: "/js/utils.js",
-      });
+  let iti = null;
+
+  // 1) Піднімаємо intl-tel-input
+  if (phoneInput && window.intlTelInput) {
+    iti = window.intlTelInput(phoneInput, {
+      initialCountry: 'ua',
+      separateDialCode: true,       // показує 380 в окремому блоці зліва
+      utilsScript: '/js/utils.js',
+    });
+  }
+
+  // 2) Маска для локального вигляду (лише для зручності користувача)
+  if (phoneInput && window.Inputmask) {
+    const inputMask = new Inputmask('99 999 99 99', {
+      placeholder: '_',
+      showMaskOnHover: false,
+      showMaskOnFocus: true,
+    });
+    inputMask.mask(phoneInput);
+  }
+
+  // Хелпер: зібрати стабільний E.164 без дубляжу 380
+  function buildE164() {
+    if (!iti) return '';
+
+    // Спробувати "правильний" номер з плагіна
+    const fromPlugin = iti.getNumber ? iti.getNumber() : '';
+    const valid = iti.isValidNumber ? iti.isValidNumber() : false;
+
+    if (valid && fromPlugin && fromPlugin.startsWith('+')) {
+      return fromPlugin; // типу +380XXXXXXXXX
     }
 
-    if (phoneInput && window.Inputmask) {
-      const inputMask = new Inputmask("99 999 99 99", {
-        placeholder: "_",
-        showMaskOnHover: false,
-        showMaskOnFocus: true,
-      });
-      inputMask.mask(phoneInput);
-    }
+    // Fallback: беремо raw з поля і прибираємо все зайве
+    const dialCode = (iti.getSelectedCountryData() && iti.getSelectedCountryData().dialCode) ? iti.getSelectedCountryData().dialCode : '380';
+    let raw = (phoneInput.value || '').replace(/\D/g, ''); // тільки цифри
 
-    if (leadForm) {
-      leadForm.addEventListener('submit', function (event) {
-        event.preventDefault();
+    // Прибрати дублікати коду країни на початку: 380, 0380, 380380 тощо
+    const dcRe = new RegExp('^(?:0*' + dialCode + ')+');
+    raw = raw.replace(dcRe, '');
 
-        const name = leadForm.querySelector('input[name="name"]').value.trim();
+    // Якщо лишився національний нуль — прибираємо
+    raw = raw.replace(/^0+/, '');
 
-        let fullPhone = '';
+    return '+' + dialCode + raw;
+  }
 
-        if (iti && typeof iti.getNumber === 'function') {
-          fullPhone = iti.getNumber();
-        }
+  // На кожній зміні — підтримуємо hidden-поле в актуальному стані
+  function syncHidden() {
+    hiddenE164.value = buildE164();
+  }
+  phoneInput.addEventListener('input', syncHidden);
+  phoneInput.addEventListener('blur', syncHidden);
+  if (iti) {
+    phoneInput.addEventListener('countrychange', syncHidden);
+  }
+  syncHidden(); // ініціалізація
 
-        // Якщо номер невалидний — fallback
-        if (!fullPhone || !fullPhone.startsWith('+') || fullPhone.length < 10) {
-          const dialCode = iti ? iti.getSelectedCountryData().dialCode : '';
-          const rawPhone = phoneInput.value.replace(/\D/g, '');
-          fullPhone = '+' + dialCode + rawPhone;
-        }
+  if (leadForm) {
+    leadForm.addEventListener('submit', function (event) {
+      event.preventDefault(); // ми самі вирішуємо, що робити з формою
 
-        // Оновити значення поля з правильним номером
-        phoneInput.value = fullPhone;
+      const name = (leadForm.querySelector('input[name="name"]')?.value || '').trim();
+      const e164 = buildE164();
+      hiddenE164.value = e164; // гарантуємо, що в момент сабміту там правильне значення
 
-        // Надсилання в Telegram
-        if (name && fullPhone.length >= 9) {
-          const message = `🔥 Нова заявка!\n👤 Ім'я: ${name}\n📞 Телефон: ${fullPhone}`;
-          const botToken = '7747442953:AAG_uTeisUybcX-mdhPJbvHSkj2sQi3M8JA';
-          const chatId = '-1002821902695';
-          const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+      // (не чіпаємо видиме поле, щоб не плодити дубль 380 при separateDialCode)
+      // phoneInput.value = e164; // ← не треба
 
-          fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: chatId,
-              text: message,
-            }),
-          }).catch(error => console.error('Telegram error:', error));
-        }
+      // 3) Телеграм (⚠️ краще робити через бекенд; фронтовий токен можуть вкрасти)
+      const BOT_TOKEN = '7747442953:AAG_uTeisUybcX-mdhPJbvHSkj2sQi3M8JA'; // ← заміни або прибери
+      const CHAT_ID   = '-1002821902695';
+      if (BOT_TOKEN !== 'ВАШ_TELEGRAM_BOT_TOKEN' && name && e164 && e164.startsWith('+') && e164.length >= 10) {
+        fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: CHAT_ID,
+            text: `🔥 Нова заявка!\n👤 Ім'я: ${name}\n📞 Телефон: ${e164}`,
+          }),
+        }).catch(err => console.error('Telegram error:', err));
+      }
 
-        // Facebook Pixel (не блокує відправку)
-        if (typeof fbq === 'function') {
-          fbq('track', 'Lead');
-        }
+      // 4) Facebook Pixel (не блокує відправку)
+      if (typeof fbq === 'function') {
+        fbq('track', 'Lead');
+      }
 
-        // Редірект після затримки
-        setTimeout(function () {
-          window.location.href = 'thank-you.html';
-        }, 600);
-      });
-    }
-  });
+      // 5) ТЕПЕР або відправляємо на FormSubmit, або робимо власний редірект.
+      // --- ВАРІАНТ A: ВІДПРАВИТИ НА FORMSUBMIT ---
+      leadForm.submit(); // форма піде на https://formsubmit.co/...
+
+      // --- ВАРІАНТ B: СВОЄ "дякую" БЕЗ FormSubmit ---
+      // window.location.href = 'thank-you.html';
+    });
+  }
+});
 </script>
+
 
 
 </body>
