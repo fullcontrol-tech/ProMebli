@@ -617,7 +617,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const phoneInput = document.getElementById('phone');
   const hiddenE164 = document.getElementById('phone_e164');
 
-  // 1) intl-tel-input (прапорці)
+  // 1) intl-tel-input
   let iti = null;
   if (phoneInput && window.intlTelInput) {
     iti = window.intlTelInput(phoneInput, {
@@ -627,7 +627,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // 2) Маска (для зручності)
+  // 2) Маска
   if (phoneInput && window.Inputmask) {
     const inputMask = new Inputmask('99 999 99 99', {
       placeholder: '_',
@@ -637,7 +637,7 @@ document.addEventListener('DOMContentLoaded', function () {
     inputMask.mask(phoneInput);
   }
 
-  // 3) Нормалізація в E.164 (без дублю 380)
+  // 3) Формування E.164
   function buildE164() {
     if (!iti) return '';
     const fromPlugin = iti.getNumber ? iti.getNumber() : '';
@@ -657,7 +657,7 @@ document.addEventListener('DOMContentLoaded', function () {
   phoneInput?.addEventListener('countrychange', syncHidden);
   syncHidden();
 
-  // 4) Сабміт: спочатку Telegram (чекаємо ≤2с), потім FormSubmit AJAX, потім редірект
+  // 4) Сабміт із перевіркою довжини номера
   leadForm?.addEventListener('submit', async function (event) {
     event.preventDefault();
 
@@ -665,12 +665,19 @@ document.addEventListener('DOMContentLoaded', function () {
     const e164 = buildE164();
     hiddenE164.value = e164;
 
-    // --- Telegram (чекаємо, але максимум 2с) ---
-    const BOT_TOKEN = '8049547454:AAEe95mBFdONGzJGb38Ktt4sNlQcfbRODCY'; // краще винести на бекенд
+    // ✅ Перевірка кількості цифр
+    const digits = e164.replace(/\D/g, '');
+    if (digits.length < 12) { // наприклад, +380XXXXXXXXX → 12 цифр (включно з 380)
+      alert("Будь ласка, введіть коректний номер телефону.");
+      phoneInput.focus();
+      return; // зупиняємо відправку
+    }
+
+    // --- Telegram (чекаємо ≤2с) ---
+    const BOT_TOKEN = '8049547454:AAEe95mBFdONGzJGb38Ktt4sNlQcfbRODCY';
     const CHAT_ID   = '-1003192230883';
 
     async function sendTelegram() {
-      if (BOT_TOKEN === 'ВАШ_TELEGRAM_BOT_TOKEN') return;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
       try {
@@ -692,10 +699,10 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     await sendTelegram();
 
-    // --- FormSubmit AJAX (використовує твій email!) ---
+    // --- FormSubmit AJAX ---
     const formData = new FormData(leadForm);
     try {
-      const res = await fetch('https://formsubmit.co/ajax/ТВІЙ.EMAIL@gmail.com', {
+      await fetch('https://formsubmit.co/ajax/ТВІЙ.EMAIL@gmail.com', {
         method: 'POST',
         body: formData,
         headers: { 'Accept': 'application/json' }
@@ -703,7 +710,6 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch (err) {
       console.error('FormSubmit AJAX error:', err);
     } finally {
-      // --- Редірект на свою "дякую" ---
       window.location.href = 'https://pro-mebli-kr.site/thank-you.html';
     }
   });
